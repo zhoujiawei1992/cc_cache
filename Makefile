@@ -1,6 +1,6 @@
 CC=gcc
 
-DIRS = $(shell find . -type d)
+DIRS = $(shell find . -type d -path ./.git -prune -o -type d -print )
 INCLUDE = $(addprefix -I, $(DIRS))
 
 # 默认编译选项
@@ -18,6 +18,9 @@ TEST_SRC = $(shell find . -name "test_*.c")
 TEST_BIN = $(patsubst %.c,cc_test/%, $(TEST_SRC:test_%.c=test_%))
 
 MAIN_OBJ = main.o
+
+HTTP_PARSER_OBJ = third/http_parser/http_parser.o
+
 # 生成对应的对象文件
 OBJ = $(SRC:.c=.o)
 # 生成对应的测试对象文件
@@ -27,7 +30,7 @@ TEST_OBJ = $(patsubst %.c,cc_test/%.o, $(TEST_SRC))
 all: format cc_cache test
 
 # 编译主程序
-cc_cache: $(OBJ) $(MAIN_OBJ)
+cc_cache: $(OBJ) $(MAIN_OBJ) $(HTTP_PARSER_OBJ)
 	$(CC) -o $@ $^ $(CFLAGS)
 
 # 测试目标

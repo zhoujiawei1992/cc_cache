@@ -103,7 +103,7 @@ static void process_timer_events(cc_event_loop_t *event_loop) {
       if (timer_proc) {
         timer_proc(event_loop, client_data);
       }
-      memset(timer_event, 0, sizeof(cc_time_event_t));
+      timer_event->is_done = 1;
     } else {
       break;
     }
@@ -192,19 +192,19 @@ int cc_del_socket_event(cc_event_loop_t *event_loop, int fd, int delmask) {
     return CC_EVENT_ERR;
   }
   cc_socket_event_t *socket_event = &event_loop->events[fd];
-  if (!(socket_event->mask & CC_EVENT_READABLE) || (socket_event->mask & CC_EVENT_WRITEABLE)) {
+  if ((delmask & CC_EVENT_READABLE) && (delmask & CC_EVENT_WRITEABLE)) {
     socket_event->fd = 0;
     socket_event->state = SS_NONE;
     socket_event->mask = 0;
-    socket_event->can_read = 0;
-    socket_event->can_write = 0;
   }
-  if (!(socket_event->mask & CC_EVENT_READABLE)) {
+  if (delmask & CC_EVENT_READABLE) {
+    socket_event->mask &= ~CC_EVENT_READABLE;
     socket_event->read_proc_data = NULL;
     socket_event->read_proc = NULL;
     socket_event->can_read = 0;
   }
-  if (!(socket_event->mask & CC_EVENT_WRITEABLE)) {
+  if (delmask & CC_EVENT_WRITEABLE) {
+    socket_event->mask &= ~CC_EVENT_WRITEABLE;
     socket_event->write_proc_data = NULL;
     socket_event->write_proc = NULL;
     socket_event->can_write = 0;
@@ -216,15 +216,15 @@ int cc_del_socket_event(cc_event_loop_t *event_loop, int fd, int delmask) {
 // _cc_time_event_s
 void cc_add_time_event(cc_event_loop_t *event_loop, cc_time_event_t *timer_event) {
   if (timer_event->node.key > 0) {
+    timer_event->is_done = 0;
     cc_rbtree_insert(&event_loop->rbtree, &timer_event->node);
-    debug_log("cc_add_time_event done, event_loop=%x, timer_event=%d", event_loop, timer_event);
+    debug_log("cc_add_time_event done, event_loop=%x, timer_event=%x", event_loop, timer_event);
   }
 }
 void cc_del_time_event(cc_event_loop_t *event_loop, cc_time_event_t *timer_event) {
   if (timer_event->node.key > 0) {
     cc_rbtree_delete(&event_loop->rbtree, &timer_event->node);
-    debug_log("cc_del_time_event done, event_loop=%x, timer_event=%d", event_loop, timer_event);
-    memset(timer_event, 0, sizeof(timer_event));
+    debug_log("cc_del_time_event done, event_loop=%x, timer_event=%x", event_loop, timer_event);
   }
 }
 

@@ -74,6 +74,9 @@ void cc_tcp_connector_connect_done(cc_event_loop_t* event_loop, int fd, void* cl
   debug_log("cc_tcp_connector_connect_done, event_loop=%x, fd=%d, client_data=%x, mask=%d", event_loop, fd, client_data,
             mask);
   cc_tcp_connector_t* connector = (cc_tcp_connector_t*)client_data;
+
+  cc_del_time_event(event_loop, &connector->connect_timer);
+
   int so_error = cc_net_so_errno(fd);
   if (!so_error) {
     connector->state = CONNECTOR_STATE_CONNECTED;

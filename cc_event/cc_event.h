@@ -32,6 +32,7 @@ typedef struct _cc_time_event_s {
   cc_rbtree_node_t node;
   void *client_data;
   cc_time_proc_t *timer_proc;
+  int is_done;
 } cc_time_event_t;
 
 typedef enum { SS_NONE, SS_LISTENING, SS_CONNECTING, SS_CONNECTED } SocketState;
