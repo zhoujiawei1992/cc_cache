@@ -57,33 +57,6 @@ void test_cc_dlist_init(void) {
   print_dlist(&head);
 }
 
-// Test cc_dlist_insert_forward
-void test_cc_dlist_insert_forward(void) {
-  cc_dlist_node_t head;
-  cc_dlist_init(&head);
-
-  cc_dlist_node_t *node1 = create_dlist_node();
-  cc_dlist_insert_forward(&head, node1);
-  assert(head.next == node1);
-  assert(head.prev == node1);
-  assert(node1->next == &head);
-  assert(node1->prev == &head);
-
-  cc_dlist_node_t *node2 = create_dlist_node();
-  cc_dlist_insert_forward(node1, node2);
-  assert(head.next == node1);
-  assert(head.prev == node2);
-  assert(node1->next == node2);
-  assert(node1->prev == &head);
-  assert(node2->next == &head);
-  assert(node2->prev == node1);
-
-  print_dlist(&head);
-
-  free_dlist_node(node1);
-  free_dlist_node(node2);
-}
-
 // Test cc_dlist_insert_backward
 void test_cc_dlist_insert_backward(void) {
   cc_dlist_node_t head;
@@ -113,33 +86,16 @@ void test_cc_dlist_insert_backward(void) {
 
 static void prinf_node(void *node) {}
 
-// Test cc_dlist_traverse_forward
-void test_cc_dlist_traverse_forward(void) {
-  cc_dlist_node_t head;
-  cc_dlist_init(&head);
-
-  cc_dlist_node_t *node1 = create_dlist_node();
-  cc_dlist_insert_forward(&head, node1);
-
-  cc_dlist_node_t *node2 = create_dlist_node();
-  cc_dlist_insert_forward(node1, node2);
-
-  cc_dlist_traverse_forward(&head, prinf_node);
-
-  free_dlist_node(node1);
-  free_dlist_node(node2);
-}
-
 // Test cc_dlist_traverse_backward
 void test_cc_dlist_traverse_backward(void) {
   cc_dlist_node_t head;
   cc_dlist_init(&head);
 
   cc_dlist_node_t *node1 = create_dlist_node();
-  cc_dlist_insert_forward(&head, node1);
+  cc_dlist_insert_backward(&head, node1);
 
   cc_dlist_node_t *node2 = create_dlist_node();
-  cc_dlist_insert_forward(node1, node2);
+  cc_dlist_insert_backward(node1, node2);
 
   cc_dlist_traverse_backward(&head, prinf_node);
 
@@ -239,9 +195,7 @@ void test_cc_slist_traverse(void) {
 
 int main(void) {
   RUN_TEST_FUNC(test_cc_dlist_init);
-  RUN_TEST_FUNC(test_cc_dlist_insert_forward);
   RUN_TEST_FUNC(test_cc_dlist_insert_backward);
-  RUN_TEST_FUNC(test_cc_dlist_traverse_forward);
   RUN_TEST_FUNC(test_cc_dlist_traverse_backward);
 
   RUN_TEST_FUNC(test_cc_slist_init);

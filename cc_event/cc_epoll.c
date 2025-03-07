@@ -56,7 +56,6 @@ int cc_api_get_max_size(cc_event_loop_t *event_loop) {
 int cc_api_add_event(cc_event_loop_t *event_loop, int fd, int mask) {
   cc_api_state_t *state = event_loop->api_data;
   struct epoll_event ee = {0};
-  int op = event_loop->events[fd].mask == CC_EVENT_NONE ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
   ee.events = 0;
   mask |= event_loop->events[fd].mask;
   if (mask & CC_EVENT_READABLE) {
@@ -65,21 +64,36 @@ int cc_api_add_event(cc_event_loop_t *event_loop, int fd, int mask) {
   if (mask & CC_EVENT_WRITEABLE) {
     ee.events |= EPOLLOUT;
   }
-  if (mask & CC_EVENT_ERROR) {
-    ee.events |= EPOLLERR;
+  if (mask & CC_EVENT_READABLE || mask & CC_EVENT_WRITEABLE) {
+    if (mask & CC_EVENT_ERROR) {
+      ee.events |= EPOLLERR;
+    }
+    if (mask & CC_EVENT_CLOSE) {
+      ee.events |= EPOLLRDHUP;
+    }
+    ee.events |= EPOLLET;
   }
-  if (mask & CC_EVENT_CLOSE) {
-    ee.events |= EPOLLRDHUP;
-  }
-  ee.events |= EPOLLET;
   ee.data.fd = fd;
-  if (epoll_ctl(state->epfd, op, fd, &ee) == -1) {
-    error_log("cc_api_add_event epoll_ctl failed, event_loop=%x, efd=%d, fd=%d, op=%d, mask=%d, err=%d, err_str=%s",
-              event_loop, state->epfd, fd, op, mask, cc_net_get_last_errno, cc_net_get_last_error);
-    return CC_EVENT_ERR;
+
+  if (event_loop->events[fd].mask == CC_EVENT_NONE) {
+    if (epoll_ctl(state->epfd, EPOLL_CTL_ADD, fd, &ee) == -1) {
+      error_log(
+          "cc_api_add_event epoll_ctl_add failed, event_loop=%x, efd=%d, fd=%d, op=%d, mask=%d, err=%d, err_str=%s",
+          event_loop, state->epfd, fd, EPOLL_CTL_ADD, mask, cc_net_get_last_errno, cc_net_get_last_error);
+      return CC_EVENT_ERR;
+    }
+    debug_log("cc_api_add_event epoll_ctl_add, event_loop=%x, efd=%d, fd=%d, op=%d, mask=%d", event_loop, state->epfd,
+              fd, EPOLL_CTL_ADD, mask);
+  } else {
+    if (epoll_ctl(state->epfd, EPOLL_CTL_MOD, fd, &ee) == -1) {
+      error_log(
+          "cc_api_add_event epoll_ctl_mod failed, event_loop=%x, efd=%d, fd=%d, op=%d, mask=%d, err=%d, err_str=%s",
+          event_loop, state->epfd, fd, EPOLL_CTL_MOD, mask, cc_net_get_last_errno, cc_net_get_last_error);
+      return CC_EVENT_ERR;
+    }
+    debug_log("cc_api_add_event epoll_ctl_mod, event_loop=%x, efd=%d, fd=%d, op=%d, mask=%d", event_loop, state->epfd,
+              fd, EPOLL_CTL_MOD, mask);
   }
-  debug_log("cc_api_add_event epoll_ctl, event_loop=%x, efd=%d, fd=%d, op=%d, mask=%d", event_loop, state->epfd, fd, op,
-            mask);
   return 0;
 }
 
@@ -94,30 +108,34 @@ int cc_api_del_event(cc_event_loop_t *event_loop, int fd, int delmask) {
   if (mask & CC_EVENT_WRITEABLE) {
     ee.events |= EPOLLOUT;
   }
-  if (mask & CC_EVENT_ERROR) {
-    ee.events |= EPOLLERR;
+  if (mask & CC_EVENT_READABLE || mask & CC_EVENT_WRITEABLE) {
+    if (mask & CC_EVENT_ERROR) {
+      ee.events |= EPOLLERR;
+    }
+    if (mask & CC_EVENT_CLOSE) {
+      ee.events |= EPOLLHUP;
+    }
+    ee.events |= EPOLLET;
   }
-  if (mask & CC_EVENT_CLOSE) {
-    ee.events |= EPOLLHUP;
-  }
-  ee.events |= EPOLLET;
   ee.data.fd = fd;
-  if (mask != CC_EVENT_NONE) {
+  if (ee.events != 0) {
     if (epoll_ctl(state->epfd, EPOLL_CTL_MOD, fd, &ee) == -1) {
-      error_log("cc_api_del_event epoll_ctl failed, event_loop=%x, efd=%d, fd=%d, op=%d, mask=%d, err=%d, err_str=%s",
-                event_loop, state->epfd, fd, EPOLL_CTL_MOD, mask, cc_net_get_last_errno, cc_net_get_last_error);
+      error_log(
+          "cc_api_del_event epoll_ctl_mod failed, event_loop=%x, efd=%d, fd=%d, op=%d, mask=%d, err=%d, err_str=%s",
+          event_loop, state->epfd, fd, EPOLL_CTL_MOD, mask, cc_net_get_last_errno, cc_net_get_last_error);
       return CC_EVENT_ERR;
     }
-    debug_log("cc_api_del_event epoll_ctl, event_loop=%x, efd=%d, fd=%d, op=%d, mask=%d", event_loop, state->epfd, fd,
-              EPOLL_CTL_MOD, mask);
+    debug_log("cc_api_del_event epoll_ctl_mod, event_loop=%x, efd=%d, fd=%d, op=%d, mask=%d", event_loop, state->epfd,
+              fd, EPOLL_CTL_MOD, mask);
   } else {
     if (epoll_ctl(state->epfd, EPOLL_CTL_DEL, fd, &ee) == -1) {
-      error_log("cc_api_del_event epoll_ctl failed, event_loop=%x, efd=%d, fd=%d, op=%d, mask=%d, err=%d, err_str=%s",
-                event_loop, state->epfd, fd, EPOLL_CTL_DEL, mask, cc_net_get_last_errno, cc_net_get_last_error);
+      error_log(
+          "cc_api_del_event epoll_ctl_del failed, event_loop=%x, efd=%d, fd=%d, op=%d, mask=%d, err=%d, err_str=%s",
+          event_loop, state->epfd, fd, EPOLL_CTL_DEL, mask, cc_net_get_last_errno, cc_net_get_last_error);
       return CC_EVENT_ERR;
     }
-    debug_log("cc_api_del_event epoll_ctl, event_loop=%x, efd=%d, fd=%d, op=%d, mask=%d", event_loop, state->epfd, fd,
-              EPOLL_CTL_DEL, mask);
+    debug_log("cc_api_del_event epoll_ctl_del, event_loop=%x, efd=%d, fd=%d, op=%d, mask=%d", event_loop, state->epfd,
+              fd, EPOLL_CTL_DEL, mask);
   }
   return 0;
 }

@@ -24,26 +24,27 @@ typedef struct _cc_slist_node_s {
 
 #define cc_dlist_insert_forward(target, node) \
   do {                                        \
-    (node)->next = (target)->next;            \
-    (node)->prev = (target);                  \
-    (target)->next->prev = (node);            \
-    (target)->next = (node);                  \
+    (node)->next = (target);                  \
+    (node)->prev = (target)->prev;            \
+    (target)->prev->next = (node);            \
+    (target)->prev = (node);                  \
   } while (0)
 
 #define cc_dlist_insert_backward(target, node) \
   do {                                         \
-    (node)->prev = (target)->prev;             \
-    (node)->next = (target);                   \
-    (target)->prev->next = (node);             \
-    (target)->prev = (node);                   \
+    (node)->prev = (target);                   \
+    (node)->next = (target)->next;             \
+    (target)->next->prev = (node);             \
+    (target)->next = (node);                   \
   } while (0)
 
-#define cc_dlist_delete(head, node)      \
-  do {                                   \
-    if ((head) != (node)) {              \
-      (node)->prev->next = (node)->next; \
-      (node)->next->prev = (node)->prev; \
-    }                                    \
+#define cc_dlist_delete(head, node)       \
+  do {                                    \
+    if ((head) != (node)) {               \
+      (node)->prev->next = (node)->next;  \
+      (node)->next->prev = (node)->prev;  \
+      (node)->next = (node)->prev = NULL; \
+    }                                     \
   } while (0)
 
 #define cc_dlist_traverse_forward(head, func) \

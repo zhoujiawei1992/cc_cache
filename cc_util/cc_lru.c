@@ -24,7 +24,7 @@ int cc_lru_cache_lookup(cc_lru_cache_t *cache, const char *key, cc_lru_cache_nod
   if (cc_hash_table_lookup(cache->hash_table, key, &hash_node) == CC_HASH_OK) {
     *node = cc_hash_node_to_cache_node(hash_node);
     cc_dlist_delete(&(cache->list_head), &((*node)->list_node));
-    cc_dlist_insert_forward(&(cache->list_head), &((*node)->list_node));
+    cc_dlist_insert_backward(&(cache->list_head), &((*node)->list_node));
     return CC_HASH_OK;
   }
   return CC_HASH_ERR;
@@ -39,7 +39,7 @@ void cc_lru_cache_insert(cc_lru_cache_t *cache, cc_lru_cache_node_t *node) {
     cache->size--;
   }
   cc_hash_table_insert(cache->hash_table, &(node->hash_node));
-  cc_dlist_insert_forward(&(cache->list_head), &(node->list_node));
+  cc_dlist_insert_backward(&(cache->list_head), &(node->list_node));
   cache->size++;
 }
 

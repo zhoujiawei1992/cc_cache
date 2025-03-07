@@ -154,3 +154,21 @@ int cc_net_read(int fd, void* buf, size_t buf_size, size_t* out_size) {
     return CC_NET_ERR;
   }
 }
+
+int cc_net_writev(int fd, struct iovec* iov, int iovcnt, size_t* out_size) {
+  ssize_t ret = writev(fd, iov, iovcnt);
+  if (ret >= 0) {
+    if (out_size) {
+      *out_size = (size_t)ret;
+    }
+    return CC_NET_OK;
+  } else {
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      return CC_NET_AGAIN;
+    } else if (errno == EINTR) {
+      return CC_NET_CONTINUE;
+    } else {
+      return CC_NET_ERR;
+    }
+  }
+}

@@ -3,6 +3,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <sys/uio.h>
 
 #define CC_NET_OK 0
 #define CC_NET_ERR -1
@@ -24,5 +25,6 @@ int cc_net_reuseaddr(int fd);
 int cc_net_accept(int fd, int* client_fd, char* buf, int buf_size);
 int cc_net_so_errno(int fd);
 int cc_net_read(int fd, void* buf, size_t count, size_t* out_size);
+int cc_net_writev(int fd, struct iovec* iov, int iovcnt, size_t* out_size);
 
 #endif

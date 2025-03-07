@@ -32,6 +32,7 @@ typedef struct _cc_time_event_s {
   cc_rbtree_node_t node;
   void *client_data;
   cc_time_proc_t *timer_proc;
+  int is_done;
 } cc_time_event_t;
 
 typedef enum { SS_NONE, SS_LISTENING, SS_CONNECTING, SS_CONNECTED } SocketState;
@@ -44,8 +45,8 @@ typedef struct _cc_socket_event_s {
   int fd;
   int mask;
   SocketState state;
-  int can_read : 1;
-  int can_write : 1;
+  unsigned int can_read : 1;
+  unsigned int can_write : 1;
 } cc_socket_event_t;
 
 typedef struct _cc_async_io_file_event_s {
