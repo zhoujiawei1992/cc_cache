@@ -1,0 +1,1 @@
+clang-format -style=file --verbose -i `find . -type f  | grep -v  './third/' | grep -v 'lang-format'| grep -E '\.c|\.h'`
