@@ -21,6 +21,7 @@ typedef struct _cc_http_reply_s {
   cc_buffer_t *header_buffer;
   cc_buffer_t *body_buffer;
   size_t bytes_sent;
+  unsigned int header_size;
   unsigned int cache_control;
   unsigned int age;
   int connection : 1;
@@ -39,7 +40,7 @@ int cc_http_client_start_send_header(cc_http_context_t *http_context);
 
 void cc_http_client_send_header_done(cc_http_context_t *http_context, size_t nbytes);
 
-int cc_http_client_start_send_body(cc_http_context_t *http_context);
+int cc_http_client_start_send_body(cc_http_context_t *http_context, const char *body, size_t body_size);
 
 void cc_http_client_send_body_done(cc_http_context_t *http_context, size_t nbytes);
 

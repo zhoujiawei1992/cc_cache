@@ -20,7 +20,7 @@ cc_string_t g_cache_control_header_field = {"Cache-Control", 13};
 cc_string_t g_server_header_field = {"Server", 6};
 cc_string_t g_expire_header_field = {"Expires", 7};
 
-extern int cc_http_client_execute_parse(cc_http_context_t *http_context, cc_string_t data);
+extern int cc_http_client_execute_parse(cc_http_context_t *http_context, const char *buffer, unsigned int length);
 void cc_http_client_read(cc_event_loop_t *event_loop, int fd, void *client_data, int mask) {
   if (!(event_loop->events[fd].mask & CC_EVENT_READABLE)) {
     debug_log("cc_http_client_read, ignore, event_loop=%x, fd=%d, client_data=%x, mask=%d", event_loop, fd, client_data,
@@ -43,9 +43,8 @@ void cc_http_client_read(cc_event_loop_t *event_loop, int fd, void *client_data,
   }
 
   do {
-    cc_buffer_t *recv_buffer =
-        (http_context->http_state == HTTP_STATE_REQUEST_HEADER_DONE ? http_context->body_buffer
-                                                                    : http_context->header_buffer);
+    cc_buffer_t *recv_buffer = (http_context->http_state < HTTP_STATE_REQUEST_HEADER_DONE ? http_context->header_buffer
+                                                                                          : http_context->body_buffer);
     if (recv_buffer->capacity <= recv_buffer->size) {
       if (http_context->http_state < HTTP_STATE_REQUEST_HEADER_DONE) {
         cc_http_client_http_context_close(http_context);
@@ -57,40 +56,46 @@ void cc_http_client_read(cc_event_loop_t *event_loop, int fd, void *client_data,
         break;
       } else {
         debug_log(
-            "cc_http_client_read, clear body buffer for more data, recv_buffer=%x, capacity=%ud, size=%ud, "
+            "cc_http_client_read, body buffer is full, recv_buffer=%x, capacity=%ud, size=%ud, "
             "event_loop=%x, fd=%d, "
             "http_context=%x, mask=%d",
             recv_buffer, recv_buffer->capacity, recv_buffer->size, event_loop, fd, http_context, mask);
-        recv_buffer->size = 0;
+        break;
       }
     }
-
-    size_t nbytes = 0;
-    int ret =
-        cc_net_read(fd, recv_buffer->data + recv_buffer->size, recv_buffer->capacity - recv_buffer->size, &nbytes);
-    if (ret == CC_EVENT_OK) {
-      cc_string_t data = {recv_buffer->data + recv_buffer->size, nbytes};
-      recv_buffer->size += nbytes;
-      http_context->total_bytes_recv += nbytes;
-      cc_http_client_request_do_parse(http_context, data);
-
-    } else if (ret == CC_NET_ERR || ret == CC_NET_CLOSE) {
-      cc_http_client_http_context_close(http_context);
-      error_log("cc_http_client_read close, read data failed, ret=%d, event_loop=%x, fd=%d, http_context=%x, mask=%d",
-                ret, event_loop, fd, http_context, mask);
-      break;
-    } else {
-      event_loop->events[fd].can_read = 0;
-      if (http_context->http_state < HTTP_STATE_REQUEST_HEADER_DONE ||
-          (http_context->http_request.content_length > 0 && http_context->http_state < HTTP_STATE_REQUEST_BODY_DONE)) {
-        cc_http_context_set_timer(http_context, &http_context->read_timer, cc_http_client_read_timeout,
-                                  CONFIG_HTTP_READ_TIMEOUT_MSEC);
+    const char *buffer = recv_buffer->data + recv_buffer->size;
+    size_t length = 0;
+    do {
+      size_t nbytes = 0;
+      int ret =
+          cc_net_read(fd, recv_buffer->data + recv_buffer->size, recv_buffer->capacity - recv_buffer->size, &nbytes);
+      if (ret == CC_EVENT_OK) {
+        length += nbytes;
+        recv_buffer->size += nbytes;
+        http_context->total_bytes_recv += nbytes;
+      } else if (ret == CC_NET_ERR || ret == CC_NET_CLOSE) {
+        error_log("cc_http_client_read close, read data failed, ret=%d, event_loop=%x, fd=%d, http_context=%x, mask=%d",
+                  ret, event_loop, fd, http_context, mask);
+        cc_http_client_http_context_close(http_context);
+        return;
+      } else {
+        event_loop->events[fd].can_read = 0;
+        if (http_context->http_state < HTTP_STATE_REQUEST_HEADER_DONE ||
+            (http_context->http_request.content_length > 0 &&
+             http_context->http_state < HTTP_STATE_REQUEST_BODY_DONE)) {
+          cc_http_context_set_timer(http_context, &http_context->read_timer, cc_http_client_read_timeout,
+                                    CONFIG_HTTP_READ_TIMEOUT_MSEC);
+        }
+        debug_log("cc_http_client_read, read data no more, ret=%d, event_loop=%x, fd=%d, http_context=%x, mask=%d", ret,
+                  event_loop, fd, http_context, mask);
+        break;
       }
-      debug_log("cc_http_client_read, read data no more, ret=%d, event_loop=%x, fd=%d, http_context=%x, mask=%d", ret,
-                event_loop, fd, http_context, mask);
-      break;
+    } while (recv_buffer->capacity > recv_buffer->size);
+
+    if (length > 0) {
+      cc_http_client_request_do_parse(http_context, buffer, length);
     }
-  } while (1);
+  } while (event_loop->events[fd].can_read != 0);
 }
 
 void cc_http_client_read_timeout(cc_event_loop_t *event_loop, void *client_data) {
@@ -291,26 +296,53 @@ void cc_http_client_http_context_close(cc_http_context_t *http_context) {
   cc_http_context_free(http_context);
 }
 
-void cc_http_client_request_do_parse(cc_http_context_t *http_context, cc_string_t data) {
+int cc_http_client_request_do_parse(cc_http_context_t *http_context, const char *buffer, unsigned int length) {
   if (http_context->http_state == HTTP_STATE_REQUEST_WAIT ||
       http_context->http_state == HTTP_STATE_REQUEST_HEADER_WAIT ||
       (http_context->http_state == HTTP_STATE_REQUEST_HEADER_DONE && http_context->http_request.content_length > 0)) {
     HttpState state = http_context->http_state;
-    if (cc_http_client_execute_parse(http_context, data)) {
+    if (cc_http_client_execute_parse(http_context, buffer, length)) {
       error_log("cc_http_client_request_do_parse cc_http_client_execute_parse, failed, http_context=%x", http_context);
-      cc_http_client_send_error_page(http_context, HTTP_STATUS_BAD_REQUEST);
+      if (http_context->http_reply.status > 0) {
+        cc_http_client_http_context_close(http_context);
+      } else {
+        cc_http_client_send_error_page(http_context, HTTP_STATUS_BAD_REQUEST);
+      }
+      return -1;
     }
   } else {
     error_log("cc_http_client_request_do_parse error state, failed, http_context=%x, http_state=%d, content_length=%d",
               http_context, http_context->http_state, http_context->http_parser.content_length);
-    cc_http_client_send_error_page(http_context, HTTP_STATUS_BAD_REQUEST);
+    if (http_context->http_reply.status > 0) {
+      cc_http_client_http_context_close(http_context);
+    } else {
+      cc_http_client_send_error_page(http_context, HTTP_STATUS_BAD_REQUEST);
+    }
+    return -1;
+  }
+  return 0;
+}
+
+void cc_http_client_request_parse_on_message_done(cc_http_context_t *http_context) {}
+
+void cc_http_client_request_parse_on_header_done(cc_http_context_t *http_context) {
+  if (http_context->http_request.content_length > 0) {
+    cc_http_reply_t *reply = &http_context->http_reply;
+    reply->status = HTTP_STATUS_OK;
+    reply->connection = CONNCETION_CLOSE;
+    reply->cache_control = CACHE_CONTROL_NO_CACHE;
+    reply->content_length = http_context->http_request.content_length;
+    cc_http_client_send_reply(http_context);
+  } else {
+    cc_http_client_send_error_page(http_context, HTTP_STATUS_OK);
   }
 }
 
-void cc_http_client_request_parse_on_message_done(cc_http_context_t *http_context) {
-  cc_http_client_send_error_page(http_context, HTTP_STATUS_OK);
+void cc_http_client_request_parse_on_body(cc_http_context_t *http_context, const char *buffer, unsigned int length) {
+  debug_log("cc_http_client_request_parse_on_body, http_context=%x, buffer=%x, length=%d", http_context, buffer,
+            length);
+  if (cc_http_client_start_send_body(http_context, buffer, length) != 0) {
+    cc_http_client_http_context_close(http_context);
+    return;
+  }
 }
-
-void cc_http_client_request_parse_on_header_done(cc_http_context_t *http_context) {}
-
-void cc_http_client_request_parse_on_body(cc_http_context_t *http_context, const char *buffer, unsigned int length) {}

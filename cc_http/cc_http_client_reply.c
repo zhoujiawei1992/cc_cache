@@ -92,6 +92,7 @@ void cc_http_client_send_reply(cc_http_context_t *http_context) {
   endp = cc_snprintf(endp, reply->header_buffer->data + reply->header_buffer->capacity - endp, "%V", &g_crlf);
 
   reply->header_buffer->size = endp - reply->header_buffer->data;
+  reply->header_size = reply->header_buffer->size;
 
   if (cc_http_client_start_send_header(http_context) != 0) {
     error_log("cc_http_client_send_reply cc_http_client_start_send_header failed, http_context=%x", http_context);
@@ -127,6 +128,8 @@ void cc_http_client_reset_reply(cc_http_context_t *http_context, cc_http_reply_t
 int cc_http_client_start_send_header(cc_http_context_t *http_context) {
   cc_send_data_node_t *node = (cc_send_data_node_t *)cc_alloc(1, sizeof(cc_send_data_node_t));
   if (node == NULL) {
+    error_log("cc_http_client_start_send_header, cc_alloc failed send_data_list has data, http_context=%x",
+              http_context);
     return -1;
   }
   node->need_free = 1;
@@ -138,9 +141,12 @@ int cc_http_client_start_send_header(cc_http_context_t *http_context) {
   http_context->send_done_proc = cc_http_client_send_header_done;
   http_context->http_reply.header_buffer = NULL;
 
-  cc_http_context_set_timer(http_context, &http_context->write_timer, cc_http_client_write_timeout,
-                            CONFIG_HTTP_WRITE_TIMEOUT_MSEC);
-  cc_http_client_write(http_context->http_worker->worker.event_loop, http_context->client_fd, http_context, 0);
+  debug_log("cc_http_client_start_send_header, http_context=%x", http_context);
+
+  cc_socket_event_t *socket_event = &http_context->http_worker->worker.event_loop->events[http_context->client_fd];
+  if (socket_event->can_write) {
+    cc_http_client_write(http_context->http_worker->worker.event_loop, http_context->client_fd, http_context, 0);
+  }
   return 0;
 }
 
@@ -151,8 +157,8 @@ void cc_http_client_send_header_done(cc_http_context_t *http_context, size_t nby
     cc_http_client_http_context_close(http_context);
     return;
   }
+  http_context->http_reply.bytes_sent += nbytes;
   if (http_context->http_reply.content_length > 0) {
-    cc_http_client_start_send_body(http_context);
     return;
   }
   if (http_context->http_reply.connection == CONNCETION_CLOSE) {
@@ -170,9 +176,94 @@ void cc_http_client_send_header_done(cc_http_context_t *http_context, size_t nby
   cc_http_context_reset(http_context);
 }
 
-int cc_http_client_start_send_body(cc_http_context_t *http_context) { return 0; }
+int cc_http_client_start_send_body(cc_http_context_t *http_context, const char *body, size_t body_size) {
+  debug_log("cc_http_client_start_send_body, http_context=%x, body_size=%lud", http_context, body_size);
+  http_context->send_done_proc = cc_http_client_send_body_done;
+  cc_socket_event_t *socket_event = &http_context->http_worker->worker.event_loop->events[http_context->client_fd];
+  if (body_size > 0 && body > http_context->header_buffer->data &&
+      body < http_context->header_buffer->data + http_context->header_buffer->size) {
+    cc_send_data_node_t *node = (cc_send_data_node_t *)cc_alloc(1, sizeof(cc_send_data_node_t));
+    if (node == NULL) {
+      error_log("cc_http_client_start_send_body, cc_alloc failed send_data_list has data, http_context=%x",
+                http_context);
+      return -1;
+    }
+    node->need_free = 0;
+    node->offset = body - http_context->header_buffer->data;
+    node->size = http_context->header_buffer->size;
+    node->data = http_context->header_buffer->data;
+    cc_dlist_insert_forward(&http_context->send_data_list, &node->node);
 
-void cc_http_client_send_body_done(cc_http_context_t *http_context, size_t nbytes) {}
+    if (socket_event->can_write) {
+      http_context->send_done_proc = cc_http_client_send_body_done;
+      cc_http_client_write(http_context->http_worker->worker.event_loop, http_context->client_fd, http_context, 0);
+    }
+
+  } else if (body_size > 0) {
+    cc_send_data_node_t *node = (cc_send_data_node_t *)cc_alloc(1, sizeof(cc_send_data_node_t));
+    if (node == NULL) {
+      error_log("cc_http_client_start_send_body, cc_alloc failed send_data_list has data, http_context=%x",
+                http_context);
+      return -1;
+    }
+
+    node->need_free = 1;
+    node->offset = body - http_context->body_buffer->data;
+    node->size = http_context->body_buffer->size;
+    node->data = http_context->body_buffer->data;
+    cc_dlist_insert_forward(&http_context->send_data_list, &node->node);
+
+    http_context->body_buffer = cc_buffer_create(CONFIG_HTTP_BODY_BUFFER_SIZE);
+    if (http_context->body_buffer == NULL) {
+      error_log("cc_http_client_start_send_body, cc_buffer_create failed send_data_list has data, http_context=%x",
+                http_context);
+      return -1;
+    }
+    if (socket_event->can_write) {
+      http_context->send_done_proc = cc_http_client_send_body_done;
+      cc_http_client_write(http_context->http_worker->worker.event_loop, http_context->client_fd, http_context, 0);
+    }
+  }
+  return 0;
+}
+
+void cc_http_client_send_body_done(cc_http_context_t *http_context, size_t nbytes) {
+  debug_log("cc_http_client_send_body_done, http_context=%x, nbytes=%ld, content_length=%ld, connection=%d",
+            http_context, nbytes, http_context->http_reply.content_length, http_context->http_reply.connection);
+  if (nbytes < 0) {
+    cc_http_client_http_context_close(http_context);
+    return;
+  }
+  http_context->http_reply.bytes_sent += nbytes;
+
+  if (http_context->http_reply.content_length + http_context->http_reply.header_size >
+      http_context->http_reply.bytes_sent) {
+    debug_log(
+        "cc_http_client_send_body_done, has data need send, http_context=%x, nbytes=%ld, bytes_sent=%ld, "
+        "content_length=%ld, header_size=%d",
+        http_context, nbytes, http_context->http_reply.bytes_sent, http_context->http_reply.content_length,
+        http_context->http_reply.header_size);
+    return;
+  }
+  debug_log(
+      "cc_http_client_send_body_done, all data sent, http_context=%x, nbytes=%ld, bytes_sent=%ld, "
+      "content_length=%ld, header_size=%d",
+      http_context, nbytes, http_context->http_reply.bytes_sent, http_context->http_reply.content_length,
+      http_context->http_reply.header_size);
+  if (http_context->http_reply.connection == CONNCETION_CLOSE) {
+    cc_http_client_http_context_close(http_context);
+    return;
+  }
+  if (!cc_dlist_empty(&http_context->send_data_list)) {
+    error_log(
+        "cc_http_client_send_body_done, cc_http_client_http_context_close send_data_list has data, http_context=%x, "
+        "nbytes=%ld, content_length=%ld, connection=%d",
+        http_context, nbytes, http_context->http_reply.content_length, http_context->http_reply.connection);
+    cc_http_client_http_context_close(http_context);
+    return;
+  }
+  cc_http_context_reset(http_context);
+}
 void cc_http_client_write(cc_event_loop_t *event_loop, int fd, void *client_data, int mask) {
   if (!(event_loop->events[fd].mask & CC_EVENT_WRITEABLE)) {
     debug_log("cc_http_client_write, ignore, event_loop=%x, fd=%d, client_data=%x, mask=%d", event_loop, fd,
@@ -202,8 +293,11 @@ void cc_http_client_write(cc_event_loop_t *event_loop, int fd, void *client_data
   }
 
   if (cc_dlist_empty(&http_context->send_data_list)) {
-    debug_log("cc_http_client_write done, emppty send list, event_loop=%x, fd=%d, http_context=%x, mask=%d", event_loop,
+    debug_log("cc_http_client_write done, empty send list, event_loop=%x, fd=%d, http_context=%x, mask=%d", event_loop,
               fd, http_context, mask);
+    if (http_context->send_done_proc) {
+      http_context->send_done_proc(http_context, 0);
+    }
     return;
   }
 

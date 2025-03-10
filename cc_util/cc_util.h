@@ -1,6 +1,7 @@
 #ifndef __CC_UTIL_CC_UTIL_H__
 #define __CC_UTIL_CC_UTIL_H__
 
+#include <assert.h>
 #include <malloc.h>
 #include <pthread.h>
 #include <stdarg.h>
@@ -27,6 +28,10 @@ void cc_inner_free(void *ptr, const char *func, int line);
 #define cc_free(ptr) (cc_inner_free((ptr), (__func__), (__LINE__)))
 
 long long get_curr_milliseconds();
+
+void cc_md5_upper_string(unsigned char result[16], unsigned char *data, unsigned int size);
+
+void cc_md5_lower_string(unsigned char result[16], unsigned char *data, unsigned int size);
 
 // 定义日志等级
 typedef enum { LOG_DEBUG, LOG_INFO, LOG_WARN, LOG_ERROR } LogLevel;

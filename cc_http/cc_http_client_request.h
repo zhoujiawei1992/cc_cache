@@ -117,7 +117,7 @@ int cc_http_client_start_read_and_write(cc_http_context_t *http_context);
 
 void cc_http_client_http_context_close(cc_http_context_t *http_context);
 
-void cc_http_client_request_do_parse(cc_http_context_t *http_context, cc_string_t data);
+int cc_http_client_request_do_parse(cc_http_context_t *http_context, const char *buffer, unsigned int length);
 
 void cc_http_client_request_parse_on_header_done(cc_http_context_t *http_context);
 

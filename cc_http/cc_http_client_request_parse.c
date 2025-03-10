@@ -36,17 +36,21 @@ int cc_http_parser_on_header_value(http_parser* parser, const char* at, size_t l
       return -1;
     }
   }
-  debug_log("cc_http_parser_on_header_value, parser=%x, http_context=%x, field=%V, value=%V", parser, http_context,
-            &header->field, &header->value);
+
+  http_context->http_request.header_size = at + length + 2 - http_context->header_buffer->data;
+  debug_log("cc_http_parser_on_header_value, parser=%x, http_context=%x, field=%V, value=%V, header_size=%d", parser,
+            http_context, &header->field, &header->value, http_context->http_request.header_size);
   return 0;
 }
 int cc_http_parser_on_headers_complete(http_parser* parser) {
   cc_http_context_t* http_context = (cc_http_context_t*)parser->data;
   http_context->http_state = HTTP_STATE_REQUEST_HEADER_DONE;
-  http_context->http_request.header_size = http_context->header_buffer->size;
+  http_context->http_request.header_size = http_context->http_request.header_size + 2;
   debug_log(
-      "cc_http_parser_on_headers_complete, parser=%x, http_context=%x, http_state=%d, header_size=%d, bytes_recv=%d",
+      "cc_http_parser_on_headers_complete, parser=%x, http_context=%x, http_state=%d, header_size=%d, body_size=%d, "
+      "bytes_recv=%d",
       parser, http_context, http_context->http_state, http_context->http_request.header_size,
+      http_context->header_buffer->size - http_context->http_request.header_size,
       http_context->http_request.bytes_recv);
   if (http_context->on_header_done_proc) {
     http_context->on_header_done_proc(http_context);
@@ -55,10 +59,6 @@ int cc_http_parser_on_headers_complete(http_parser* parser) {
 }
 int cc_http_parser_on_body(http_parser* parser, const char* at, size_t length) {
   cc_http_context_t* http_context = (cc_http_context_t*)parser->data;
-  if (at >= http_context->header_buffer->data &&
-      at < http_context->header_buffer->data + http_context->header_buffer->size) {
-    http_context->http_request.header_size = at - http_context->header_buffer->data;
-  }
   debug_log(
       "cc_http_parser_on_body, parser=%x, http_context=%x, content_length=%d, header_size=%d, body_size=%d, "
       "bytes_recv=%d",
@@ -86,7 +86,7 @@ int cc_http_parser_on_message_complete(http_parser* parser) {
   return 0;
 }
 
-int cc_http_client_execute_parse(cc_http_context_t* http_context, cc_string_t data) {
+int cc_http_client_execute_parse(cc_http_context_t* http_context, const char* buffer, unsigned int length) {
   static http_parser_settings settings = {
       NULL,
       cc_http_parser_on_url,
@@ -108,8 +108,8 @@ int cc_http_client_execute_parse(cc_http_context_t* http_context, cc_string_t da
   }
 
   if (http_context->http_state == HTTP_STATE_REQUEST_HEADER_WAIT) {
-    http_context->http_request.bytes_recv += data.len;
-    size_t size = http_parser_execute(&http_context->http_parser, &settings, data.buf, data.len);
+    http_context->http_request.bytes_recv += length;
+    size_t size = http_parser_execute(&http_context->http_parser, &settings, buffer, length);
     if (HTTP_PARSER_ERRNO(&http_context->http_parser) != HPE_OK) {
       error_log(
           "cc_http_client_execute_parse, http_parser_execute failed, parser=%x, http_context=%x, errno=%s, error=%s",
@@ -120,9 +120,9 @@ int cc_http_client_execute_parse(cc_http_context_t* http_context, cc_string_t da
     debug_log("cc_http_client_execute_parse, http_parser_execute, parser=%x, http_context=%x",
               &http_context->http_parser, http_context);
   } else if (http_context->http_state == HTTP_STATE_REQUEST_HEADER_DONE) {
-    http_context->http_request.bytes_recv += data.len;
+    http_context->http_request.bytes_recv += length;
 
-    size_t size = http_parser_execute(&http_context->http_parser, &settings, data.buf, data.len);
+    size_t size = http_parser_execute(&http_context->http_parser, &settings, buffer, length);
     if (HTTP_PARSER_ERRNO(&http_context->http_parser) != HPE_OK) {
       error_log(
           "cc_http_client_execute_parse, http_parser_execute failed, parser=%x, http_context=%x, errno=%s, error=%s",

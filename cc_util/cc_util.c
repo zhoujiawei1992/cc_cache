@@ -16,6 +16,24 @@ long long get_curr_milliseconds() {
   gettimeofday(&tv, NULL);
   return tv.tv_sec * 1000LL + tv.tv_usec / 1000;
 }
+void cc_md5_upper_string(unsigned char result[16], unsigned char *data, unsigned int size) {
+  static const char upper_hex_chars[] = "0123456789abcdef";
+  for (int i = 0; i < 16; ++i) {
+    if (i * 2 < size && i * 2 + 1 < size) {
+      data[i * 2] = upper_hex_chars[(result[i] >> 4) & 0x0F];
+      data[i * 2 + 1] = upper_hex_chars[result[i] & 0x0F];
+    }
+  }
+}
+void cc_md5_lower_string(unsigned char result[16], unsigned char *data, unsigned int size) {
+  static const char lower_hex_chars[] = "0123456789ABCDEF";
+  for (int i = 0; i < 16; ++i) {
+    if (i * 2 < size && i * 2 + 1 < size) {
+      data[i * 2] = lower_hex_chars[(result[i] >> 4) & 0x0F];
+      data[i * 2 + 1] = lower_hex_chars[result[i] & 0x0F];
+    }
+  }
+}
 
 // 获取日志等级的字符串表示
 const char *log_level_to_string(LogLevel level) {
