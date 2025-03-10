@@ -48,10 +48,10 @@ int cc_http_parser_on_headers_complete(http_parser* parser) {
   http_context->http_request.header_size = http_context->http_request.header_size + 2;
   debug_log(
       "cc_http_parser_on_headers_complete, parser=%x, http_context=%x, http_state=%d, header_size=%d, body_size=%d, "
-      "bytes_recv=%d",
+      "bytes_recv=%d, keepalive=%d",
       parser, http_context, http_context->http_state, http_context->http_request.header_size,
-      http_context->header_buffer->size - http_context->http_request.header_size,
-      http_context->http_request.bytes_recv);
+      http_context->header_buffer->size - http_context->http_request.header_size, http_context->http_request.bytes_recv,
+      http_should_keep_alive(parser));
   if (http_context->on_header_done_proc) {
     http_context->on_header_done_proc(http_context);
   }
@@ -75,10 +75,10 @@ int cc_http_parser_on_message_complete(http_parser* parser) {
   http_context->http_state = HTTP_STATE_REQUEST_BODY_DONE;
   debug_log(
       "cc_http_parser_on_message_complete, parser=%x, http_context=%x, content_length=%d, header_size=%d, "
-      "body_size=%d, bytes_recv=%d",
+      "body_size=%d, bytes_recv=%d, keepalive=%d",
       parser, http_context, http_context->http_request.content_length, http_context->http_request.header_size,
       http_context->http_request.bytes_recv - http_context->http_request.header_size,
-      http_context->http_request.bytes_recv);
+      http_context->http_request.bytes_recv, http_should_keep_alive(parser));
   if (http_context->on_message_done_proc) {
     http_context->on_message_done_proc(http_context);
   }

@@ -329,7 +329,7 @@ void cc_http_client_request_parse_on_header_done(cc_http_context_t *http_context
   if (http_context->http_request.content_length > 0) {
     cc_http_reply_t *reply = &http_context->http_reply;
     reply->status = HTTP_STATUS_OK;
-    reply->connection = CONNCETION_CLOSE;
+    reply->connection = http_should_keep_alive(&http_context->http_parser) ? CONNCETION_KEEPALIVE : CONNCETION_CLOSE;
     reply->cache_control = CACHE_CONTROL_NO_CACHE;
     reply->content_length = http_context->http_request.content_length;
     cc_http_client_send_reply(http_context);
