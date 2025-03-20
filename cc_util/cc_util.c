@@ -74,8 +74,8 @@ void memcheck_show(char *buffer, unsigned int buffer_size, unsigned int *out_siz
       cc_slist_node_t *node = control_block[i].node[j].node.next;
       while (node != NULL) {
         cc_mem_prefix_t *prefix = cc_list_data(node, cc_mem_prefix_t, node);
-        endp = cc_snprintf(endp, buffer + buffer_size - endp, "%2d\t%10uz\t%s:%d\n", i, prefix->size, prefix->func,
-                           prefix->line);
+        endp = cc_snprintf(endp, buffer + buffer_size - endp, "%2d\t%10uz\t%x\t%s:%d\n", i, prefix->size, prefix->ptr,
+                           prefix->func, prefix->line);
         node = node->next;
         sum[i] += prefix->size;
       }
@@ -94,6 +94,7 @@ void memcheck_show(char *buffer, unsigned int buffer_size, unsigned int *out_siz
 void *cc_inner_malloc(size_t size, const char *func, int line) {
   size_t real_size = sizeof(cc_mem_prefix_t) + (size + CC_ALIGN_NUM - 1) & ~(CC_ALIGN_NUM - 1);
   void *ptr = malloc(real_size);
+  debug_log("cc_inner_malloc %x, %uz", ptr, real_size);
   if (ptr) {
     ((cc_mem_prefix_t *)ptr)->size = real_size;
     ((cc_mem_prefix_t *)ptr)->ptr = ptr;
@@ -141,6 +142,7 @@ void *cc_inner_align_alloc(size_t align, size_t size, const char *func, int line
   size_t real_align = CC_FORCE_ALIGN_NUM;
   size_t real_size = size + real_align;
   void *ptr = memalign(real_align, real_size);
+  debug_log("cc_inner_align_alloc %x, %uz", ptr, real_size);
   if (ptr) {
     cc_mem_prefix_t *prefix = ptr + real_align - sizeof(cc_mem_prefix_t);
     prefix->size = real_size;
@@ -156,6 +158,7 @@ void *cc_inner_align_alloc(size_t align, size_t size, const char *func, int line
 void cc_inner_free(void *ptr, const char *func, int line) {
   cc_mem_prefix_t *prefix = ptr - sizeof(cc_mem_prefix_t);
   memcheck_free(prefix);
+  debug_log("cc_inner_free %x", prefix->ptr);
   return free(prefix->ptr);
 }
 

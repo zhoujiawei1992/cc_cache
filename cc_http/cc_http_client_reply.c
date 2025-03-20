@@ -482,6 +482,7 @@ void cc_http_client_write(cc_event_loop_t *event_loop, int fd, void *client_data
         bytes_sent -= last_size;
         cc_buffer_free(send_data_node->buffer);
         cc_dlist_delete(&http_context->send_data_list, node);
+        cc_free(node);
         node = http_context->send_data_list.next;
       } else {
         flag = send_data_node->flag;

@@ -317,6 +317,9 @@ int cc_http_client_start_read_and_write(cc_http_context_t *http_context) {
 }
 
 void cc_inner_http_client_http_context_close(cc_http_context_t *http_context, const char *func, int line) {
+  cc_http_client_reset_request(http_context, &http_context->http_request);
+  cc_http_client_reset_reply(http_context, &http_context->http_reply);
+
   cc_http_context_del_timer(http_context, &http_context->read_timer);
   cc_http_context_del_timer(http_context, &http_context->write_timer);
 
