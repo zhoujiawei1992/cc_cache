@@ -3,7 +3,7 @@
 #include "cc_util/cc_atomic.h"
 #include "cc_util/cc_util.h"
 cc_buffer_t* cc_inner_buffer_create(unsigned int capacity, const char* func, int line) {
-  cc_buffer_t* buffer = (cc_buffer_t*)cc_inner_align_alloc(sizeof(void*), sizeof(cc_buffer_t), func, line);
+  cc_buffer_t* buffer = (cc_buffer_t*)cc_inner_malloc(sizeof(cc_buffer_t), func, line);
   if (buffer == NULL) {
     return NULL;
   }

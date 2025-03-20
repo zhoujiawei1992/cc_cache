@@ -9,6 +9,8 @@ const char* worker_type_to_string(WorkerType worker_type) {
       return "default";
     case CC_HTTP_WORKER:
       return "http";
+    case CC_HTTP_ADMIN_WORKER:
+      return "http_admin";
     default:
       return "UNKNOWN";
   }

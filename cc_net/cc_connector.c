@@ -66,6 +66,13 @@ void cc_tcp_connector_close(cc_tcp_connector_t* connector) {
   }
 }
 void cc_tcp_connector_connect_done(cc_event_loop_t* event_loop, int fd, void* client_data, int mask) {
+  if (fd >= event_loop->nevents) {
+    error_log("cc_tcp_connector_connect_done fd size is limited, event_loop=%x, fd=%d, client_data=%x, mask=%d",
+              event_loop, fd, client_data, mask);
+    cc_net_close(fd);
+    return;
+  }
+
   if (!(event_loop->events[fd].mask & CC_EVENT_WRITEABLE)) {
     debug_log("cc_tcp_connector_connect_done ignore, event_loop=%x, fd=%d, client_data=%x, mask=%d", event_loop, fd,
               client_data, mask);

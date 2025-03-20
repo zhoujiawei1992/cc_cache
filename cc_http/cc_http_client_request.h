@@ -136,4 +136,8 @@ void cc_http_client_request_parse_on_message_done(cc_http_context_t *http_contex
 
 void cc_http_client_request_parse_on_body(cc_http_context_t *http_context, const char *buffer, unsigned int length);
 
+void cc_http_client_admin_request_parse_on_header_done(cc_http_context_t *http_context);
+
+void cc_http_client_admin_request_parse_on_message_done(cc_http_context_t *http_context);
+
 #endif

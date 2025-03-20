@@ -1,13 +1,17 @@
 #include "cc_util/cc_hash.h"
 #include "cc_util/cc_util.h"
 
-static unsigned int cc_default_hash(const char *key, unsigned int size) {
+static unsigned int cc_default_hash(const char *key, unsigned int key_size, size_t bucket_size) {
   unsigned int hash = 5381;
-  int c;
-  while ((c = *key++)) {
-    hash = ((hash << 5) + hash) + c;  // hash * 33 + c
+  for (int i = 0; i < key_size; ++i) {
+    hash = ((hash << 5) + hash) + (int)(key[i]);  // hash * 33 + c
   }
-  return hash % size;
+  return hash % bucket_size;
+}
+
+static int cc_default_compare(const char *key, unsigned int key_size, const char *other_key,
+                              unsigned int other_key_size) {
+  return strncmp(key, other_key, CC_MIN(key_size, other_key_size));
 }
 
 static unsigned int cc_hash_table_load_factor(cc_hash_table_t *table) {
@@ -18,7 +22,7 @@ static unsigned int cc_hash_table_load_factor(cc_hash_table_t *table) {
 }
 
 // 创建哈希表
-cc_hash_table_t *cc_hash_table_create(size_t bucket_size, cc_hash_func_t *hash_func,
+cc_hash_table_t *cc_hash_table_create(size_t bucket_size, cc_hash_func_t *hash_func, cc_compare_func_t *compare_func,
                                       cc_hash_destroy_node_func_t *destroy_node_func) {
   cc_hash_table_t *table = (cc_hash_table_t *)cc_malloc(sizeof(cc_hash_table_t));
   if (!table) {
@@ -27,6 +31,7 @@ cc_hash_table_t *cc_hash_table_create(size_t bucket_size, cc_hash_func_t *hash_f
   table->node_size = 0;
   table->bucket_size = bucket_size < CC_MIN_BUCKET_SIZE ? CC_MIN_BUCKET_SIZE : bucket_size;
   table->hash_func = hash_func ? hash_func : cc_default_hash;
+  table->compare_func = compare_func ? compare_func : cc_default_compare;
   table->destroy_node_func = destroy_node_func;
   table->buckets = (cc_hash_node_t **)cc_alloc(table->bucket_size, sizeof(cc_hash_node_t *));
   if (!table->buckets) {
@@ -38,7 +43,7 @@ cc_hash_table_t *cc_hash_table_create(size_t bucket_size, cc_hash_func_t *hash_f
 
 // 插入节点
 void cc_hash_table_insert(cc_hash_table_t *table, cc_hash_node_t *node) {
-  unsigned int index = table->hash_func(node->key, table->bucket_size);
+  unsigned int index = table->hash_func(node->key.data, node->key.size, table->bucket_size);
   if (table->buckets[index] == NULL) {
     table->buckets[index] = node;
   } else {
@@ -49,11 +54,11 @@ void cc_hash_table_insert(cc_hash_table_t *table, cc_hash_node_t *node) {
 }
 
 // 查找节点
-int cc_hash_table_lookup(cc_hash_table_t *table, const char *key, cc_hash_node_t **node) {
-  unsigned int index = table->hash_func(key, table->bucket_size);
+int cc_hash_table_lookup(cc_hash_table_t *table, const char *key, unsigned int key_size, cc_hash_node_t **node) {
+  unsigned int index = table->hash_func(key, key_size, table->bucket_size);
   cc_hash_node_t *current = table->buckets[index];
   while (current) {
-    if (strcmp(current->key, key) == 0) {
+    if (table->compare_func(current->key.data, current->key.size, key, key_size) == 0) {
       *node = current;
       return CC_HASH_OK;
     }
@@ -63,12 +68,12 @@ int cc_hash_table_lookup(cc_hash_table_t *table, const char *key, cc_hash_node_t
 }
 
 // 删除节点
-void cc_hash_table_delete(cc_hash_table_t *table, const char *key) {
-  unsigned int index = table->hash_func(key, table->bucket_size);
+void cc_hash_table_delete(cc_hash_table_t *table, const char *key, unsigned int key_size) {
+  unsigned int index = table->hash_func(key, key_size, table->bucket_size);
   cc_hash_node_t *current = table->buckets[index];
   cc_hash_node_t *last = NULL;
   while (current) {
-    if (strcmp(current->key, key) == 0) {
+    if (table->compare_func(current->key.data, current->key.size, key, key_size) == 0) {
       if (last) {
         last->next = current->next;
       } else {
@@ -107,7 +112,7 @@ static void transfer_buckets(cc_dynamic_hash_table_t *table) {
   if (!table->large_table) {
     table->transfer_index = 0;
     table->large_table = cc_hash_table_create(table->small_table->bucket_size, table->small_table->hash_func,
-                                              table->small_table->destroy_node_func);
+                                              table->small_table->compare_func, table->small_table->destroy_node_func);
     if (!table->large_table) {
       // warning
       return;
@@ -129,13 +134,14 @@ static void transfer_buckets(cc_dynamic_hash_table_t *table) {
 
 // 创建动态哈希表
 cc_dynamic_hash_table_t *cc_dynamic_hash_table_create(size_t bucket_size, cc_hash_func_t *hash_func,
+                                                      cc_compare_func_t *compare_func,
                                                       cc_hash_destroy_node_func_t *destroy_node_func) {
   cc_dynamic_hash_table_t *table = (cc_dynamic_hash_table_t *)cc_malloc(sizeof(cc_dynamic_hash_table_t));
   if (!table) {
     return NULL;
   }
   table->transfer_index = 0;
-  table->small_table = cc_hash_table_create(bucket_size, hash_func, destroy_node_func);
+  table->small_table = cc_hash_table_create(bucket_size, hash_func, compare_func, destroy_node_func);
   if (!table->small_table) {
     cc_free(table);
     return NULL;
@@ -157,14 +163,15 @@ void cc_dynamic_hash_table_insert(cc_dynamic_hash_table_t *table, cc_hash_node_t
 }
 
 // 查找节点
-int cc_dynamic_hash_table_lookup(cc_dynamic_hash_table_t *table, const char *key, cc_hash_node_t **node) {
+int cc_dynamic_hash_table_lookup(cc_dynamic_hash_table_t *table, const char *key, unsigned int key_size,
+                                 cc_hash_node_t **node) {
   if (table->large_table) {
-    if (cc_hash_table_lookup(table->large_table, key, node) == CC_HASH_OK) {
+    if (cc_hash_table_lookup(table->large_table, key, key_size, node) == CC_HASH_OK) {
       return CC_HASH_OK;
     }
   }
   if (table->small_table) {
-    if (cc_hash_table_lookup(table->small_table, key, node) == CC_HASH_OK) {
+    if (cc_hash_table_lookup(table->small_table, key, key_size, node) == CC_HASH_OK) {
       return CC_HASH_OK;
     }
   }
@@ -172,12 +179,12 @@ int cc_dynamic_hash_table_lookup(cc_dynamic_hash_table_t *table, const char *key
 }
 
 // 删除节点
-void cc_dynamic_hash_table_delete(cc_dynamic_hash_table_t *table, const char *key) {
+void cc_dynamic_hash_table_delete(cc_dynamic_hash_table_t *table, const char *key, unsigned int key_size) {
   if (table->large_table) {
-    cc_hash_table_delete(table->large_table, key);
+    cc_hash_table_delete(table->large_table, key, key_size);
   }
   if (table->small_table) {
-    cc_hash_table_delete(table->small_table, key);
+    cc_hash_table_delete(table->small_table, key, key_size);
   }
   if (table->small_table && table->large_table) {
     transfer_buckets(table);

@@ -23,14 +23,14 @@ typedef struct _cc_lru_cache_s {
 #define cc_hash_node_to_cache_node(node) \
   (cc_lru_cache_node_t *)((unsigned char *)(node) - offsetof(cc_lru_cache_node_t, hash_node))
 
-cc_lru_cache_t *cc_lru_cache_create(size_t capacity, cc_hash_func_t *hash_func,
+cc_lru_cache_t *cc_lru_cache_create(size_t capacity, cc_hash_func_t *hash_func, cc_compare_func_t *compare_func,
                                     cc_hash_destroy_node_func_t *destroy_node_func);
 
-int cc_lru_cache_lookup(cc_lru_cache_t *cache, const char *key, cc_lru_cache_node_t **node);
+int cc_lru_cache_lookup(cc_lru_cache_t *cache, const char *key, unsigned int key_size, cc_lru_cache_node_t **node);
 
 void cc_lru_cache_insert(cc_lru_cache_t *cache, cc_lru_cache_node_t *node);
 
-void cc_lru_cache_delete(cc_lru_cache_t *cache, const char *key);
+void cc_lru_cache_delete(cc_lru_cache_t *cache, const char *key, unsigned int key_size);
 
 void cc_lru_cache_free(cc_lru_cache_t *cache);
 

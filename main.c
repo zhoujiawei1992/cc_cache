@@ -75,11 +75,18 @@ void test_parse() {
 }
 
 int main(int argc, char* argv[]) {
+#ifdef CC_MEMCHECK
+  memcheck_init();
+#endif
+
   signal(SIGPIPE, SIG_IGN);
   error_log_open(&global_log_ctx, NULL, LOG_DEBUG);
-  cc_worker_t* worker = cc_http_worker_create();
+  cc_worker_t* worker = cc_http_worker_create(CC_HTTP_WORKER);
+  cc_worker_t* worker1 = cc_http_worker_create(CC_HTTP_ADMIN_WORKER);
   cc_start_worker(worker);
+  cc_start_worker(worker1);
   cc_join_worker(worker);
+  cc_join_worker(worker1);
   // test_parse();
   error_log_close(&global_log_ctx);
 

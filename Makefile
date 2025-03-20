@@ -8,6 +8,10 @@ CFLAGS_DEFAULT=$(INCLUDE)
 
 # 允许用户通过命令行传递额外的编译选项
 CFLAGS_EXTRA=-g -lpthread
+ifeq ($(CC_MEMCHECK),1)  # 通过 make CC_MEMCHECK=1 触发
+CFLAGS_EXTRA += -DCC_MEMCHECK
+endif
+
 CFLAGS=$(CFLAGS_DEFAULT) $(CFLAGS_EXTRA)
 
 # 找到所有非测试源文件（包括 main.c）

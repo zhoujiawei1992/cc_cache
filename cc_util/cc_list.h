@@ -97,13 +97,17 @@ typedef struct _cc_slist_node_s {
     }                                                          \
   } while (0)
 
-#define cc_slist_traverse(head, func)        \
-  do {                                       \
-    cc_slist_node_t *current = (head)->next; \
-    while (current != NULL) {                \
-      func(current);                         \
-      current = current->next;               \
-    }                                        \
+#define cc_slist_traverse(head, finder, func) \
+  do {                                        \
+    cc_slist_node_t *last = head;             \
+    cc_slist_node_t *current = (head)->next;  \
+    while (current != NULL) {                 \
+      if (func(last, current, finder) != 0) { \
+        break;                                \
+      }                                       \
+      last = current;                         \
+      current = current->next;                \
+    }                                         \
   } while (0)
 
 #endif

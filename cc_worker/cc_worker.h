@@ -10,6 +10,7 @@
 typedef enum {
   CC_DEFAULT_WORKER,
   CC_HTTP_WORKER,
+  CC_HTTP_ADMIN_WORKER,
 } WorkerType;
 
 typedef struct _cc_worker_s cc_worker_t;

@@ -14,6 +14,6 @@ typedef struct _cc_http_worker_s {
 void cc_free_http_worker(cc_worker_t* worker);
 int cc_start_http_worker(cc_worker_t* worker);
 void cc_stop_http_worker(cc_worker_t* worker);
-cc_worker_t* cc_http_worker_create();
+cc_worker_t* cc_http_worker_create(WorkerType worker_type);
 
 #endif

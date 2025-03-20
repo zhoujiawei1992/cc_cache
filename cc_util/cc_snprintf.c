@@ -90,12 +90,12 @@ char *cc_vslprintf(char *buf, char *last, const char *fmt, va_list args) {
       switch (*fmt) {
         case 'V':
           v = va_arg(args, cc_string_t *);
-          if (v->buf == NULL) {
+          if (v->data == NULL) {
             len = CC_MIN(((size_t)(last - buf)), 4);  // 4 is len of NULL
             buf = CC_CPYMEM(buf, CC_STRING_NULL, len);
           } else {
-            len = CC_MIN(((size_t)(last - buf)), v->len);
-            buf = CC_CPYMEM(buf, v->buf, len);
+            len = CC_MIN(((size_t)(last - buf)), v->size);
+            buf = CC_CPYMEM(buf, v->data, len);
           }
           fmt++;
           continue;

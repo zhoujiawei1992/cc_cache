@@ -3,16 +3,16 @@
 #include <string.h>
 int cc_http_parser_on_url(http_parser* parser, const char* at, size_t length) {
   cc_http_context_t* http_context = (cc_http_context_t*)parser->data;
-  http_context->http_request.url.buf = at;
-  http_context->http_request.url.len = length;
+  http_context->http_request.url.data = at;
+  http_context->http_request.url.size = length;
   debug_log("cc_http_parser_on_url, parser=%x, http_context=%x, url=%V, method=%s", parser, http_context,
             &http_context->http_request.url, http_method_str(parser->method));
   return 0;
 }
 int cc_http_parser_on_header_field(http_parser* parser, const char* at, size_t length) {
   cc_http_context_t* http_context = (cc_http_context_t*)parser->data;
-  http_context->http_request.parsing_header_field.buf = at;
-  http_context->http_request.parsing_header_field.len = length;
+  http_context->http_request.parsing_header_field.data = at;
+  http_context->http_request.parsing_header_field.size = length;
   debug_log("cc_http_parser_on_header_field, parser=%x, http_context=%x, parsing_header_field=%V", parser, http_context,
             &http_context->http_request.parsing_header_field);
   return 0;
@@ -25,13 +25,13 @@ int cc_http_parser_on_header_value(http_parser* parser, const char* at, size_t l
     return -1;
   }
   header->field = http_context->http_request.parsing_header_field;
-  header->value.buf = at;
-  header->value.len = length;
+  header->value.data = at;
+  header->value.size = length;
   cc_slist_insert(&http_context->http_request.header_list, &header->node);
 
-  if (strncasecmp(header->field.buf, g_content_length_header_field.buf, header->field.len) == 0) {
+  if (strncasecmp(header->field.data, g_content_length_header_field.data, header->field.size) == 0) {
     unsigned long long content_length = 0;
-    if (str2ull(header->value.buf, header->value.len, &content_length) == 0) {
+    if (str2ull(header->value.data, header->value.size, &content_length) == 0) {
       http_context->http_request.content_length = (size_t)content_length;
     } else {
       error_log("cc_http_parser_on_header_value, parser header=%V failed, value=%V", &header->field, &header->value);
@@ -39,8 +39,8 @@ int cc_http_parser_on_header_value(http_parser* parser, const char* at, size_t l
     }
   }
 
-  if (strncasecmp(header->field.buf, g_transfer_encoding_chunked_field.buf, header->field.len) == 0 &&
-      strncasecmp(header->value.buf, g_transfer_encoding_chunked_value.buf, header->value.len) == 0) {
+  if (strncasecmp(header->field.data, g_transfer_encoding_chunked_field.data, header->field.size) == 0 &&
+      strncasecmp(header->value.data, g_transfer_encoding_chunked_value.data, header->value.size) == 0) {
     http_context->http_request.chunk_header = 1;
   }
 

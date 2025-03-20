@@ -27,7 +27,7 @@ typedef struct _cc_http_reply_s {
   ssize_t content_length;
   unsigned int connection : 1;
   unsigned int chunk_header : 1;
-  unsigned int chunk_complete : 1;
+  // unsigned int chunk_complete : 1;
 } cc_http_reply_t;
 
 void cc_http_client_clear_reply(cc_http_context_t *http_context, cc_http_reply_t *reply);

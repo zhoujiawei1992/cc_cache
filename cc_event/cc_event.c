@@ -3,7 +3,7 @@
 #include "cc_net/cc_net.h"
 #include "cc_util/cc_util.h"
 
-#define CC_MAX_FD_SIZE (1024 * 1024)
+#define CC_MAX_FD_SIZE (1024 * 128)
 
 // _cc_event_loop_s
 void cc_event_loop_delete(cc_event_loop_t *event_loop) {

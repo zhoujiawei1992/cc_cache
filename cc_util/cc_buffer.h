@@ -4,8 +4,8 @@
 #include <stdlib.h>
 
 typedef struct _cc_string_s {
-  const char *buf;
-  unsigned int len;
+  const char *data;
+  unsigned int size;
 } cc_string_t;
 
 typedef struct _cc_buffer_s {

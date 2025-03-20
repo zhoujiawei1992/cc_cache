@@ -7,7 +7,7 @@
 
 #include <string.h>
 
-#define MAX_IOV_NUM (32)
+#define CC_MAX_IOV_NUM (32)
 void cc_http_client_send_error_page(cc_http_context_t *http_context, enum http_status status) {
   cc_http_reply_t *reply = &http_context->http_reply;
   reply->status = status;
@@ -33,12 +33,12 @@ void cc_http_client_send_reply(cc_http_context_t *http_context) {
   cc_slist_node_t *node = reply->header_list.next;
   while (node != NULL) {
     cc_http_header_t *header = cc_list_data(node, cc_http_header_t, node);
-    if (strncasecmp(header->field.buf, g_content_length_header_field.buf, header->field.len) != 0 &&
-        strncasecmp(header->field.buf, g_connection_header_field.buf, header->field.len) != 0 &&
-        strncasecmp(header->field.buf, g_cache_control_header_field.buf, header->field.len) != 0 &&
-        strncasecmp(header->field.buf, g_date_header_field.buf, header->field.len) != 0 &&
-        strncasecmp(header->field.buf, g_server_header_field.buf, header->field.len) != 0 &&
-        strncasecmp(header->field.buf, g_expire_header_field.buf, header->field.len) != 0) {
+    if (strncasecmp(header->field.data, g_content_length_header_field.data, header->field.size) != 0 &&
+        strncasecmp(header->field.data, g_connection_header_field.data, header->field.size) != 0 &&
+        strncasecmp(header->field.data, g_cache_control_header_field.data, header->field.size) != 0 &&
+        strncasecmp(header->field.data, g_date_header_field.data, header->field.size) != 0 &&
+        strncasecmp(header->field.data, g_server_header_field.data, header->field.size) != 0 &&
+        strncasecmp(header->field.data, g_expire_header_field.data, header->field.size) != 0) {
       endp = cc_snprintf(endp, reply->header_buffer->data + reply->header_buffer->capacity - endp, "%V: %V%V",
                          &header->field, &header->value, &g_crlf);
     }
@@ -163,8 +163,7 @@ void cc_http_client_send_header_done(cc_http_context_t *http_context, ssize_t nb
     return;
   }
   http_context->http_reply.bytes_sent += nbytes;
-  if (http_context->http_reply.content_length > 0 ||
-      (http_context->http_reply.chunk_header && http_context->http_reply.chunk_complete == 0)) {
+  if (http_context->http_reply.content_length > 0 || http_context->http_reply.chunk_header) {
     return;
   }
   if (http_context->http_reply.connection == CONNCETION_CLOSE) {
@@ -186,38 +185,54 @@ int cc_http_client_start_send_body(cc_http_context_t *http_context, const char *
   debug_log("cc_http_client_start_send_body, http_context=%x, body_size=%lud", http_context, body_size);
   http_context->send_done_proc = cc_http_client_send_body_done;
   cc_socket_event_t *socket_event = &http_context->http_worker->worker.event_loop->events[http_context->client_fd];
-  if (body_size > 0 && body > http_context->header_buffer->data &&
-      body < http_context->header_buffer->data + http_context->header_buffer->size) {
-    cc_send_data_node_t *node = (cc_send_data_node_t *)cc_alloc(1, sizeof(cc_send_data_node_t));
-    if (node == NULL) {
-      error_log("cc_http_client_start_send_body, cc_alloc failed send_data_list has data, http_context=%x",
-                http_context);
-      return -1;
-    }
-    node->offset = body - http_context->header_buffer->data;
-    node->size = body + body_size - http_context->header_buffer->data;
-    cc_buffer_assgin(&node->buffer, http_context->header_buffer);
-    cc_dlist_insert_forward(&http_context->send_data_list, &node->node);
 
-    if (socket_event->can_write) {
-      cc_http_client_write(http_context->http_worker->worker.event_loop, http_context->client_fd, http_context, 0);
-    }
+  if (body_size > 0) {
+    if (http_context->header_buffer != NULL && body >= http_context->header_buffer->data &&
+        body < http_context->header_buffer->data + http_context->header_buffer->size) {
+      cc_send_data_node_t *node = (cc_send_data_node_t *)cc_alloc(1, sizeof(cc_send_data_node_t));
+      if (node == NULL) {
+        error_log("cc_http_client_start_send_body, cc_alloc failed send_data_list has data, http_context=%x",
+                  http_context);
+        return -1;
+      }
+      node->offset = body - http_context->header_buffer->data;
+      node->size = body + body_size - http_context->header_buffer->data;
+      cc_buffer_assgin(&node->buffer, http_context->header_buffer);
+      cc_dlist_insert_forward(&http_context->send_data_list, &node->node);
 
-  } else if (body_size > 0) {
-    cc_send_data_node_t *node = (cc_send_data_node_t *)cc_alloc(1, sizeof(cc_send_data_node_t));
-    if (node == NULL) {
-      error_log("cc_http_client_start_send_body, cc_alloc failed send_data_list has data, http_context=%x",
-                http_context);
-      return -1;
-    }
+      if (socket_event->can_write) {
+        cc_http_client_write(http_context->http_worker->worker.event_loop, http_context->client_fd, http_context, 0);
+      }
 
-    node->offset = body - http_context->body_buffer->data;
-    node->size = body + body_size - http_context->body_buffer->data;
-    cc_buffer_assgin(&node->buffer, http_context->body_buffer);
-    cc_dlist_insert_forward(&http_context->send_data_list, &node->node);
+    } else if (http_context->body_buffer != NULL && body >= http_context->body_buffer->data &&
+               body < http_context->body_buffer->data + http_context->body_buffer->size) {
+      cc_send_data_node_t *node = (cc_send_data_node_t *)cc_alloc(1, sizeof(cc_send_data_node_t));
+      if (node == NULL) {
+        error_log("cc_http_client_start_send_body, cc_alloc failed send_data_list has data, http_context=%x",
+                  http_context);
+        return -1;
+      }
 
-    if (socket_event->can_write) {
-      cc_http_client_write(http_context->http_worker->worker.event_loop, http_context->client_fd, http_context, 0);
+      node->offset = body - http_context->body_buffer->data;
+      node->size = body + body_size - http_context->body_buffer->data;
+      cc_buffer_assgin(&node->buffer, http_context->body_buffer);
+      cc_dlist_insert_forward(&http_context->send_data_list, &node->node);
+
+      if (socket_event->can_write) {
+        cc_http_client_write(http_context->http_worker->worker.event_loop, http_context->client_fd, http_context, 0);
+      }
+    } else if (http_context->http_reply.body_buffer != NULL && body >= http_context->http_reply.body_buffer->data &&
+               body < http_context->http_reply.body_buffer->data + http_context->http_reply.body_buffer->size) {
+      cc_send_data_node_t *node = (cc_send_data_node_t *)cc_alloc(1, sizeof(cc_send_data_node_t));
+      if (node == NULL) {
+        error_log("cc_http_client_start_send_body, cc_alloc failed send_data_list has data, http_context=%x",
+                  http_context);
+        return -1;
+      }
+      node->offset = body - http_context->http_reply.body_buffer->data;
+      node->size = body + body_size - http_context->http_reply.body_buffer->data;
+      cc_buffer_assgin(&node->buffer, http_context->http_reply.body_buffer);
+      cc_dlist_insert_forward(&http_context->send_data_list, &node->node);
     }
   }
   return 0;
@@ -285,11 +300,11 @@ int cc_http_client_start_send_chunked_body(cc_http_context_t *http_context, cons
       node->size = node->buffer->size;
       cc_dlist_insert_forward(&http_context->send_data_list, &node->node);
     }
-    if (body > http_context->header_buffer->data &&
+    if (http_context->header_buffer != NULL && body >= http_context->header_buffer->data &&
         body < http_context->header_buffer->data + http_context->header_buffer->size) {
       cc_send_data_node_t *node = (cc_send_data_node_t *)cc_alloc(1, sizeof(cc_send_data_node_t));
       if (node == NULL) {
-        error_log("cc_http_client_start_send_body, cc_alloc failed send_data_list has data, http_context=%x",
+        error_log("cc_http_client_start_send_chunked_body, cc_alloc failed send_data_list has data, http_context=%x",
                   http_context);
         return -1;
       }
@@ -297,16 +312,30 @@ int cc_http_client_start_send_chunked_body(cc_http_context_t *http_context, cons
       node->size = body + body_size - http_context->header_buffer->data;
       cc_buffer_assgin(&node->buffer, http_context->header_buffer);
       cc_dlist_insert_forward(&http_context->send_data_list, &node->node);
-    } else {
+    } else if (http_context->body_buffer != NULL && body >= http_context->body_buffer->data &&
+               body < http_context->body_buffer->data + http_context->body_buffer->size) {
       cc_send_data_node_t *node = (cc_send_data_node_t *)cc_alloc(1, sizeof(cc_send_data_node_t));
       if (node == NULL) {
-        error_log("cc_http_client_start_send_body, cc_alloc failed send_data_list has data, http_context=%x",
+        error_log("cc_http_client_start_send_chunked_body, cc_alloc failed send_data_list has data, http_context=%x",
                   http_context);
         return -1;
       }
       node->offset = body - http_context->body_buffer->data;
       node->size = body + body_size - http_context->body_buffer->data;
       cc_buffer_assgin(&node->buffer, http_context->body_buffer);
+      cc_dlist_insert_forward(&http_context->send_data_list, &node->node);
+
+    } else if (http_context->http_reply.body_buffer != NULL && body >= http_context->http_reply.body_buffer->data &&
+               body < http_context->http_reply.body_buffer->data + http_context->http_reply.body_buffer->size) {
+      cc_send_data_node_t *node = (cc_send_data_node_t *)cc_alloc(1, sizeof(cc_send_data_node_t));
+      if (node == NULL) {
+        error_log("cc_http_client_start_send_chunked_body, cc_alloc failed send_data_list has data, http_context=%x",
+                  http_context);
+        return -1;
+      }
+      node->offset = body - http_context->http_reply.body_buffer->data;
+      node->size = body + body_size - http_context->http_reply.body_buffer->data;
+      cc_buffer_assgin(&node->buffer, http_context->http_reply.body_buffer);
       cc_dlist_insert_forward(&http_context->send_data_list, &node->node);
     }
     {
@@ -437,7 +466,7 @@ void cc_http_client_write(cc_event_loop_t *event_loop, int fd, void *client_data
     }
     return;
   }
-  struct iovec iov[MAX_IOV_NUM] = {0};
+  struct iovec iov[CC_MAX_IOV_NUM] = {0};
   int ret = 0;
   ssize_t nbytes = 0;
   ssize_t bytes_sent = 0;
@@ -445,7 +474,7 @@ void cc_http_client_write(cc_event_loop_t *event_loop, int fd, void *client_data
   do {
     size_t iov_num = 0;
     cc_dlist_node_t *node = http_context->send_data_list.next;
-    while (node != &http_context->send_data_list && iov_num < MAX_IOV_NUM) {
+    while (node != &http_context->send_data_list && iov_num < CC_MAX_IOV_NUM) {
       cc_send_data_node_t *send_data_node = cc_list_data(node, cc_send_data_node_t, node);
       assert(send_data_node->size != 0);
       ssize_t last_size = send_data_node->size - send_data_node->offset;

@@ -11,6 +11,11 @@
 
 #define CC_MIN(a, b) ((a) < (b) ? (a) : (b))
 
+#ifdef CC_MEMCHECK
+void memcheck_init();
+void memcheck_show(char *buffer, unsigned int buffer_size, unsigned int *out_size);
+#endif
+
 void *cc_inner_malloc(size_t size, const char *func, int line);
 void *cc_inner_alloc(size_t n, size_t size, const char *func, int line);
 void *cc_inner_realloc(void *ptr, size_t size, const char *func, int line);

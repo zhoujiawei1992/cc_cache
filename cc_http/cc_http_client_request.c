@@ -2,6 +2,7 @@
 #include "cc_net/cc_acceptor.h"
 #include "cc_net/cc_net.h"
 #include "cc_util/cc_config.h"
+#include "cc_util/cc_snprintf.h"
 #include "cc_util/cc_util.h"
 
 cc_string_t g_crlf = {"\r\n", 2};
@@ -270,12 +271,21 @@ void cc_http_client_accept(cc_event_loop_t *event_loop, int fd, void *client_dat
 
       http_context->http_state = HTTP_STATE_REQUEST_WAIT;
       http_context->client_fd = client_fd;
-      http_context->on_header_done_proc = cc_http_client_request_parse_on_header_done;
-      http_context->on_body_proc = cc_http_client_request_parse_on_body;
-      http_context->on_chunk_header = NULL;
-      http_context->on_chunk_complete = NULL;
-      http_context->on_message_done_proc = cc_http_client_request_parse_on_message_done;
       memcpy(http_context->client_addr, addr_buf, INET_ADDRSTRLEN);
+
+      if (acceptor->worker->type == CC_HTTP_WORKER) {
+        http_context->on_header_done_proc = cc_http_client_request_parse_on_header_done;
+        http_context->on_body_proc = cc_http_client_request_parse_on_body;
+        http_context->on_chunk_header = NULL;
+        http_context->on_chunk_complete = NULL;
+        http_context->on_message_done_proc = cc_http_client_request_parse_on_message_done;
+      } else {
+        http_context->on_header_done_proc = cc_http_client_admin_request_parse_on_header_done;
+        http_context->on_body_proc = NULL;
+        http_context->on_chunk_header = NULL;
+        http_context->on_chunk_complete = NULL;
+        http_context->on_message_done_proc = cc_http_client_admin_request_parse_on_message_done;
+      }
 
       if (cc_http_client_start_read_and_write(http_context) != 0) {
         error_log(
@@ -354,9 +364,11 @@ int cc_http_client_request_do_parse(cc_http_context_t *http_context, const char 
 
 void cc_http_client_request_parse_on_message_done(cc_http_context_t *http_context) {
   cc_http_context_del_timer(http_context, &http_context->read_timer);
-  if (cc_http_client_start_send_last_chunked(http_context) != 0) {
-    cc_http_client_http_context_close(http_context);
-    return;
+  if (http_context->http_request.chunk_header) {
+    if (cc_http_client_start_send_last_chunked(http_context) != 0) {
+      cc_http_client_http_context_close(http_context);
+      return;
+    }
   }
 }
 
@@ -389,5 +401,35 @@ void cc_http_client_request_parse_on_body(cc_http_context_t *http_context, const
       cc_http_client_http_context_close(http_context);
       return;
     }
+  }
+}
+
+void cc_http_client_admin_request_parse_on_header_done(cc_http_context_t *http_context) {
+  cc_http_reply_t *reply = &http_context->http_reply;
+  reply->status = HTTP_STATUS_OK;
+  reply->connection = CONNCETION_CLOSE;
+  reply->cache_control = CACHE_CONTROL_NO_CACHE;
+  http_context->http_reply.chunk_header = 1;
+  cc_http_client_send_reply(http_context);
+}
+
+void cc_http_client_admin_request_parse_on_message_done(cc_http_context_t *http_context) {
+  cc_http_reply_t *reply = &http_context->http_reply;
+  reply->body_buffer = cc_buffer_create(CONFIG_ADMIN_HTTP_BODY_BUFFER_SIZE);
+#ifdef CC_MEMCHECK
+  memcheck_show(reply->body_buffer->data, reply->body_buffer->capacity, &reply->body_buffer->size);
+#else
+  char *endp =
+      cc_snprintf(reply->body_buffer->data, reply->body_buffer->capacity, "Not Support, need enable CC_MEMCHECK\n");
+  reply->body_buffer->size = endp - reply->body_buffer->data;
+#endif
+
+  if (cc_http_client_start_send_chunked_body(http_context, reply->body_buffer->data, reply->body_buffer->size) != 0) {
+    cc_http_client_http_context_close(http_context);
+    return;
+  }
+  if (cc_http_client_start_send_last_chunked(http_context) != 0) {
+    cc_http_client_http_context_close(http_context);
+    return;
   }
 }

@@ -29,14 +29,14 @@ void cc_stop_http_worker(cc_worker_t* worker) {
   debug_log("http worker stoped. %d", http_worker->worker.id);
 }
 
-cc_worker_t* cc_http_worker_create() {
+cc_worker_t* cc_http_worker_create(WorkerType worker_type) {
   cc_http_worker_t* http_worker = (cc_http_worker_t*)cc_alloc(1, sizeof(cc_http_worker_t));
   if (http_worker == NULL) {
     error_log("create http worker failed, cc_alloc %d failed.", sizeof(cc_http_worker_t));
     return NULL;
   }
 
-  cc_init_worker(&http_worker->worker, CC_HTTP_WORKER);
+  cc_init_worker(&http_worker->worker, worker_type);
 
   http_worker->worker.event_loop = cc_event_loop_create();
   if (http_worker->worker.event_loop == NULL) {
@@ -50,7 +50,7 @@ cc_worker_t* cc_http_worker_create() {
   http_worker->worker.stop = cc_stop_http_worker;
 
   cc_slist_init(&http_worker->acceptor_list);
-  {
+  if (worker_type == CC_HTTP_WORKER) {
     cc_tcp_acceptor_t* acceptor =
         cc_tcp_acceptor_create((cc_worker_t*)http_worker, "127.0.0.1", 8080, 1024, cc_http_client_accept);
     if (acceptor == NULL) {
@@ -59,8 +59,7 @@ cc_worker_t* cc_http_worker_create() {
       return NULL;
     }
     cc_slist_insert(&http_worker->acceptor_list, &acceptor->node);
-  }
-  {
+  } else if (worker_type == CC_HTTP_ADMIN_WORKER) {
     cc_tcp_acceptor_t* acceptor =
         cc_tcp_acceptor_create((cc_worker_t*)http_worker, "127.0.0.1", 8081, 1024, cc_http_client_accept);
     if (acceptor == NULL) {
