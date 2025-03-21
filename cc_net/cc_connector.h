@@ -1,9 +1,12 @@
-#ifndef __CC_HTTP_CC_CONNECTOR_H__
-#define __CC_HTTP_CC_CONNECTOR_H__
+#ifndef __CC_NET_CC_CONNECTOR_H__
+#define __CC_NET_CC_CONNECTOR_H__
 
 #include "cc_event/cc_event.h"
+#include "cc_util/cc_hash.h"
 #include "cc_util/cc_list.h"
 #include "cc_worker/cc_worker.h"
+
+#define CC_CONNECTOR_IP_PORT_LEN (32)
 
 typedef enum {
   CONNECTOR_STATE_CLOSED,
@@ -19,6 +22,11 @@ typedef struct _cc_tcp_connector_s {
   cc_time_event_t connect_timer;
   int remote_fd;
   ConnectorState state;
+  // pool
+  cc_hash_node_t hash_node;
+  cc_time_event_t timeout_in_pool_timer;
+  char key[CC_CONNECTOR_IP_PORT_LEN];
+  int idx_in_pool;
 } cc_tcp_connector_t;
 
 cc_tcp_connector_t* cc_tcp_connector_create(cc_worker_t* worker, const char* ip, int port,

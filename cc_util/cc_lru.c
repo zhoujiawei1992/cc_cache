@@ -35,7 +35,8 @@ void cc_lru_cache_insert(cc_lru_cache_t *cache, cc_lru_cache_node_t *node) {
     cc_dlist_node_t *last_node = cache->list_head.prev;
     cc_dlist_delete(&(cache->list_head), last_node);
     cc_lru_cache_node_t *last_cache_node = cc_list_node_to_cache_node(last_node);
-    cc_hash_table_delete(cache->hash_table, last_cache_node->hash_node.key.data, last_cache_node->hash_node.key.size);
+    cc_hash_table_delete(cache->hash_table, last_cache_node->hash_node.key.data, last_cache_node->hash_node.key.size,
+                         NULL);
     cache->size--;
   }
   cc_hash_table_insert(cache->hash_table, &(node->hash_node));
@@ -48,7 +49,7 @@ void cc_lru_cache_delete(cc_lru_cache_t *cache, const char *key, unsigned int ke
   if (cc_hash_table_lookup(cache->hash_table, key, key_size, &hash_node) == CC_HASH_OK) {
     cc_lru_cache_node_t *node = cc_hash_node_to_cache_node(hash_node);
     cc_dlist_delete(&(cache->list_head), &(node->list_node));
-    cc_hash_table_delete(cache->hash_table, key, key_size);
+    cc_hash_table_delete(cache->hash_table, key, key_size, NULL);
     cache->size--;
   }
 }

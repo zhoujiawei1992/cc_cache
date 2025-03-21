@@ -27,6 +27,8 @@ typedef int cc_compare_func_t(const char *key, unsigned int key_size, const char
 
 typedef void cc_hash_destroy_node_func_t(cc_hash_node_t *node);
 
+#define cc_hash_data(node, type, link) (type *)((unsigned char *)(node) - offsetof(type, link))
+
 typedef struct _cc_hash_table_s {
   cc_hash_node_t **buckets;
   cc_hash_func_t *hash_func;
@@ -53,7 +55,10 @@ void cc_hash_table_insert(cc_hash_table_t *table, cc_hash_node_t *node);
 int cc_hash_table_lookup(cc_hash_table_t *table, const char *key, unsigned int key_size, cc_hash_node_t **node);
 
 // 删除节点
-void cc_hash_table_delete(cc_hash_table_t *table, const char *key, unsigned int key_size);
+void cc_hash_table_delete(cc_hash_table_t *table, const char *key, unsigned int key_size, cc_hash_node_t **node);
+
+// 删除节点, 但不调用释放函数
+void cc_hash_table_remove(cc_hash_table_t *table, cc_hash_node_t *node);
 
 // 释放哈希表
 void cc_hash_table_free(cc_hash_table_t *table);
@@ -71,7 +76,11 @@ int cc_dynamic_hash_table_lookup(cc_dynamic_hash_table_t *table, const char *key
                                  cc_hash_node_t **node);
 
 // 删除节点
-void cc_dynamic_hash_table_delete(cc_dynamic_hash_table_t *table, const char *key, unsigned int key_size);
+void cc_dynamic_hash_table_delete(cc_dynamic_hash_table_t *table, const char *key, unsigned int key_size,
+                                  cc_hash_node_t **node);
+
+// 删除节点, 但不调用释放函数
+void cc_dynamic_hash_table_remove(cc_dynamic_hash_table_t *table, cc_hash_node_t *node);
 
 // 释放动态哈希表
 void cc_dynamic_hash_table_free(cc_dynamic_hash_table_t *table);

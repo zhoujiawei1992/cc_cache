@@ -4,6 +4,7 @@
 #include <arpa/inet.h>
 #include "cc_event/cc_event.h"
 #include "cc_http/cc_http_client_reply.h"
+#include "cc_http/cc_http_upstream.h"
 #include "cc_http/cc_http_worker.h"
 #include "cc_util/cc_buffer.h"
 #include "cc_util/cc_list.h"
@@ -67,6 +68,12 @@ typedef struct _cc_send_data_node_s {
   unsigned int flag;
 } cc_send_data_node_t;
 
+typedef struct _cc_http_upstream_s {
+  cc_http_reply_t http_reply;
+  cc_http_request_t http_request;
+  http_parser http_parser;
+} cc_http_upstream_t;
+
 typedef struct _cc_http_context_s {
   cc_http_worker_t *http_worker;
   cc_buffer_t *header_buffer;
@@ -78,8 +85,9 @@ typedef struct _cc_http_context_s {
 
   cc_http_reply_t http_reply;
   cc_http_request_t http_request;
-  http_parser http_parser;
+  cc_http_upstream_t http_upstream;
 
+  http_parser http_parser;
   cc_dlist_node_t send_data_list;
   cc_http_send_done_proc_t *send_done_proc;
 

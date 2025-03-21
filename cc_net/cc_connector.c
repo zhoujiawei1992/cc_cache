@@ -1,5 +1,6 @@
 #include "cc_net/cc_connector.h"
 #include "cc_net/cc_net.h"
+#include "cc_util/cc_snprintf.h"
 #include "cc_util/cc_util.h"
 cc_tcp_connector_t* cc_tcp_connector_create(cc_worker_t* worker, const char* ip, int port,
                                             cc_socket_proc_t* connect_done, int timeout) {
@@ -11,6 +12,12 @@ cc_tcp_connector_t* cc_tcp_connector_create(cc_worker_t* worker, const char* ip,
   connector->worker = worker;
   connector->state = CONNECTOR_STATE_CLOSED;
   connector->connect_done = connect_done;
+  connector->idx_in_pool = -1;
+
+  char* endp = cc_snprintf(connector->key, CC_CONNECTOR_IP_PORT_LEN, "%s:%d", ip, port);
+  connector->hash_node.key.data = connector->key;
+  connector->hash_node.key.size = endp - connector->key;
+  connector->hash_node.next = NULL;
 
   int ret = cc_net_tcp_connect(ip, port, &connector->remote_fd);
   if (ret == CC_NET_ERR) {
@@ -46,18 +53,15 @@ cc_tcp_connector_t* cc_tcp_connector_create(cc_worker_t* worker, const char* ip,
 
 void cc_tcp_connector_free(cc_tcp_connector_t* connector) {
   debug_log("cc_tcp_connector_free done, connector=%x, state=%d", connector, connector->state);
-  if (connector->state == CONNECTOR_STATE_CLOSED) {
-    cc_free(connector);
-  } else {
-    cc_tcp_connector_close(connector);
-    cc_free(connector);
-  }
+  cc_tcp_connector_close(connector);
+  cc_free(connector);
 }
 
 void cc_tcp_connector_close(cc_tcp_connector_t* connector) {
   debug_log("cc_tcp_connector_free done, connector=%x, state=%d, fd=%d", connector, connector->state,
             connector->remote_fd);
   if (connector->remote_fd > 0) {
+    cc_del_time_event(connector->worker->event_loop, &connector->connect_timer);
     cc_del_socket_event(connector->worker->event_loop, connector->remote_fd, CC_EVENT_WRITEABLE);
     cc_net_close(connector->remote_fd);
     connector->remote_fd = 0;

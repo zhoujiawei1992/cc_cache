@@ -1,5 +1,5 @@
-#ifndef __CC_HTTP_CC_ACCEPTOR_H__
-#define __CC_HTTP_CC_ACCEPTOR_H__
+#ifndef __CC_NET_CC_ACCEPTOR_H__
+#define __CC_NET_CC_ACCEPTOR_H__
 
 #include "cc_util/cc_list.h"
 #include "cc_worker/cc_worker.h"
